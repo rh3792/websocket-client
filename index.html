@@ -47,7 +47,7 @@ function getRemoteAddress() {
  if (input == '')
   return '';
  
- pattern = /^(?:(?:ws:\/\/)?([a-zA-Z0-9\.]+)(?::(\d+))?)$/g;
+ pattern = /^(?:(?:wss:\/\/)?([a-zA-Z0-9\.]+)(?::(\d+))?)$/g;
 
  result = pattern.exec(input);
  address = '';
@@ -56,7 +56,7 @@ function getRemoteAddress() {
    port = 9999
   else
    port = result[2]
-  address = 'ws://'+result[1]+':'+port;
+  address = 'wss://'+result[1]+':'+port;
  }
  
  return address;
