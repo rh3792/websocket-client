@@ -1,0 +1,268 @@
+<!--DOCTYPE html-->
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>websocket test</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.31.3/css/theme.default.min.css">
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/css/bootstrap.min.css">
+
+<script type="text/javascript" src="http://code.jquery.com/jquery-3.4.1.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.tablesorter/2.31.3/js/jquery.tablesorter.min.js" integrity="sha512-qzgd5cYSZcosqpzpn7zF2ZId8f/8CHmFKZ8j7mU4OUXTNRd5g+ZHBPsgKEwoqxCtdQvExE5LprwwPAgoicguNg==" crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.2/js/bootstrap.min.js"></script>
+<style>
+#msg_area {
+width: 100%; 
+height: 300px; 
+overflow-y: scroll;
+overflow-x: hidden;
+border:1px solid black;
+background-color: black;
+display: none;
+}
+ul {
+list-style-type: none;
+padding: 1px;
+margin: 1px;
+}
+li {
+color: white;
+word-break: break-all;
+}
+.dos {
+width: 100%;
+color: white;
+background-color: black;
+border:1px solid black;
+margin: 0px;
+padding: 0px;
+display: none;
+}
+</style>
+<script>
+
+function getRemoteAddress() {
+ input = $('input[name="remote_address"]').val();
+ if (input == '')
+  return '';
+ 
+ pattern = /^(?:(?:ws:\/\/)?([a-zA-Z0-9\.]+)(?::(\d+))?)$/g;
+
+ result = pattern.exec(input);
+ address = '';
+ if (result != null) {
+  if (typeof result[2] === 'undefined')
+   port = 9999
+  else
+   port = result[2]
+  address = 'ws://'+result[1]+':'+port;
+ }
+ 
+ return address;
+}
+
+function socketOpened() {
+ $('input[name="remote_address"]').attr('disabled', true);
+ $('#button_connect').hide();
+ $('#button_disconnect').show();
+ 
+ printMessage('connected');
+ console.log('socket opened');
+}
+
+function socketClosed() {
+ console.log('socket closed');
+ 
+ $('input[name="remote_address"]').attr('disabled', false);
+ $('#button_connect').show();
+ $('#button_disconnect').hide();
+ 
+ printMessage('not connected');
+ 
+ socket = 0;
+}
+
+function handleMessage(data) {
+	//lines = msg.replace('\r\n', '\n').split('\n');
+	data = JSON.parse(data);
+	if(data.type == 'msg') {
+		for (var i in data.msg) {
+			if(data.msg[i] == 'disconnected') {
+				disconnect();
+				break
+			}
+			printMessage(data.msg[i]);
+		}
+	} else if(data.type == 'order') {
+		for (var i in data.data) {
+			var target_id = "coin-"+data.data[i].base+"-"+data.data[i].coin+"-"+data.data[i].src+"-"+data.data[i].dst;
+			if(data.data[i] == false) {
+			}
+			if($("#"+target_id).length == 0) {
+				var line = "<tr id='"+target_id+"'><td>"+data.data[i].coin+"</td><td>"+data.data[i].src+"</td><td>"+data.data[i].dst+"</td><td>"+data.data[i].sp+"</td><td>"+data.data[i].dp+"</td><td>"+data.data[i].per+"</td></tr>";
+				$("#table-"+data.data[i].base).append(line);
+			} else {
+				if(parseFloat(data.data[i].per) > 101.0) {
+					$("#"+target_id+" td").css("background-color","#ffb9b9");
+				} else if(parseFloat(data.data[i].per) > 100.5) {
+					$("#"+target_id+" td").css("background-color","#f8f5b9");
+				} else {
+					$("#"+target_id+" td").css("background-color","white");
+				}
+				$("#"+target_id+">td:nth-child(4)").html(data.data[i].sp);
+				$("#"+target_id+">td:nth-child(5)").html(data.data[i].dp);
+				$("#"+target_id+">td:nth-child(6)").html(data.data[i].per);
+			}
+			if(parseFloat(data.data[i].per) < 100.0) {
+				//$("#"+target_id).css("display","none");
+			} else {
+				//$("#"+target_id).css("display","unset");
+			}
+		}
+		$(".tablesorter").trigger("update");
+	}
+}
+
+var socket = 0;
+function connect() {
+ if (socket != 0 && socket.readyState != 1)
+  return;
+ 
+ printMessage('connecting...')
+ $('input[name="remote_address"]').attr('disabled', true);
+ $('#button_connect').hide();
+ 
+ socket = new WebSocket(remote_address);
+ socket.onopen = function() {
+  socketOpened();
+ };
+ socket.onerror = function(error) {
+  console.log('socket error');
+  console.log(error);
+  printMessage('connection error');
+ };
+ socket.onmessage = function(event) {
+  handleMessage(event.data);
+ };
+ socket.onclose = function() {
+  socketClosed();
+ };
+ 
+}
+
+function disconnect() {
+ if (socket != 0) {
+  printMessage('disconnecting...')
+  socket.close();
+ }
+}
+
+function initConnectionUI() {
+ $('#button_connect').click(function() {
+  remote_address = getRemoteAddress();
+  if (remote_address != '') {
+   connect();
+  }
+ });
+ 
+ $('#button_disconnect').click(disconnect);
+}
+
+function printMessage(msg) {
+ msg_list = $('#msg_list')
+ $('<li></li>').text(msg).appendTo(msg_list)
+ $('#msg_area').scrollTop(msg_list.outerHeight());
+}
+
+
+$(document).ready(function() {
+ initConnectionUI();
+ 
+ $('input[name="command_line"]').keyup(function(e) {
+  if (e.which == 13) {
+   if (socket != 0 && socket.readyState == 1)
+    socket.send($(this).val());
+   else
+    console.log('socket is not alive');
+   $(this).val('');
+   
+  }
+ });
+ 
+ $(".tablesorter").tablesorter({ 
+	sortList: [[5,1]],
+	widgets: ["filter"],
+	widgetOptions : {
+		filter_columnFilters: true,
+		filter_external: '.search',
+		filter_defaultAttrib: 'data-value',
+		columnSelector_mediaquery: false
+	}
+ });
+});
+
+</script>
+</head>
+
+<body>
+
+<div class="container">
+
+	<div class="page-header">
+		<h1>Cryptocurrency</h1>
+		<p class="lead">Global Finance Trade System</p>
+	</div>
+	<div>
+		<input name="remote_address" type="text" value="124.50.88.107:8765">
+		<button id="button_connect">connect</button>
+		<button id="button_disconnect" style="display:none">disconnect</button>
+	</div>
+
+	<div id="msg_area">
+		<ul id="msg_list"></ul>
+	</div>
+	<input class="dos" name="command_line" type="text">
+
+	<h3>Global Finance</h3>
+	<p>The global financial system is the worldwide framework of legal agreements, institutions, and both formal and informal economic actors that together facilitate international flows of financial capital for purposes of investment and trade financing.</p>
+	<div class="row">
+		<div class="col-md-6">
+		
+			<table id="table-KRW" class="tablesorter">
+				<thead>
+					<tr>
+						<th>Coin</th>
+						<th>Starting</th>
+						<th>Destination</th>
+						<th>Src Price</th>
+						<th>Dst Price</th>
+						<th>Benefit</th>
+					</tr>
+				</thead>
+				<tbody>
+				</tbody>
+			</table>
+			
+		</div>
+		<div class="col-md-6">
+		
+			<table id="table-USDT" class="tablesorter">
+				<thead>
+					<tr>
+						<th>Coin</th>
+						<th>Starting</th>
+						<th>Destination</th>
+						<th>Src Price</th>
+						<th>Dst Price</th>
+						<th>Benefit</th>
+					</tr>
+				</thead>
+				<tbody>
+				</tbody>
+			</table>
+		</div>
+	</div>
+</div>
+</body>
+</html>
